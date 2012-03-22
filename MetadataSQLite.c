@@ -1,7 +1,9 @@
-/*
-   This is the SQLite Implementation for the Metadata
-   server's database.
-*/
+/**
+ * This is the SQLite Implementation for the Metadata
+ * server. It's a small table consisting of a directory
+ * listing and information which will be retrieved by
+ * stat on the filesystem.
+ */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,6 +19,9 @@
 
 static sqlite3 *md_db;
 
+/**
+ * Open the SQLite database.
+ */
 int md_open() {
     char *errMsg = NULL;
     int rc;
@@ -29,10 +34,16 @@ int md_open() {
     }
 }
 
+/**
+ * Close the SQLite database.
+ */
 void md_close() {
     sqlite3_close(md_db);
 }
 
+/**
+ * Clear a SQLite error, given that it returned with an error.
+ */
 void md_clerr(int rc) {
     if( rc ) {
         fprintf(stderr, "SQLite Error: %s\n", sqlite3_errmsg(md_db));
@@ -40,12 +51,19 @@ void md_clerr(int rc) {
     }
 }
 
+/**
+ * Determine if an update was performed or not, if not then emit
+ * a non-fatal error message.
+ */
 void md_done(int rc) {
     if( rc != SQLITE_DONE ) {
         fprintf(stderr, "Operation not performed.\n");
     }
 }
 
+/**
+ * The truncate system call sets the file size in the database.
+ */
 static int md_truncate(const char* path, off_t size) {
     sqlite3_stmt *stmt = NULL;
     const char *tail = NULL;
@@ -60,6 +78,9 @@ static int md_truncate(const char* path, off_t size) {
     return 0;
 }
 
+/**
+ * The chown call sets the UID and the GID in the database.
+ */
 static int md_chown(const char* path, uid_t uid, gid_t gid) {
     sqlite3_stmt *stmt = NULL;
     const char *tail = NULL;
@@ -75,6 +96,10 @@ static int md_chown(const char* path, uid_t uid, gid_t gid) {
     return 0;
 }
 
+/**
+ * The mknod call inserts a new file into the database with default
+ * times.
+ */
 static int md_mknod(const char* path, mode_t mode) {
     sqlite3_stmt *stmt = NULL;
     const char *tail = NULL;
@@ -90,6 +115,9 @@ static int md_mknod(const char* path, mode_t mode) {
     return 0;
 }
 
+/**
+ * The unlink call removes a file from the database.
+ */
 static int md_unlink(const char* path) {
     sqlite3_stmt *stmt = NULL;
     const char *tail = NULL;
@@ -105,6 +133,10 @@ static int md_unlink(const char* path) {
     return 0;
 }
 
+/**
+ * The readdir call back.
+ * TODO: Implement md_readdir with the callback free API
+ */
 static int md_readdir_cb(void *sock, int argc, char **argv, char **cName) {
     int i;
     for(i=0; i<argc; i++){
@@ -116,6 +148,11 @@ static int md_readdir_cb(void *sock, int argc, char **argv, char **cName) {
     return 0;
 }
 
+/**
+ * The readdir call reads all of the files in the directory,
+ * optional path (which is unused currently), and emits them
+ * to the client.
+ */
 static int md_readdir(void *sock, const char* path) {
     char *errMsg = NULL;
     int rc;
@@ -128,6 +165,12 @@ static int md_readdir(void *sock, const char* path) {
     return 0;
 }
 
+/**
+ * The getattr call gets the stat information from the database,
+ * and emits them to the client in a predetermined order.
+ * TODO: Implement md_getattr and receiving end using a
+ *       more practical serialization.
+ */
 static int md_getattr(void *sock, const char* path) {
     char *errMsg = NULL;
     const char *tail = NULL;
@@ -149,6 +192,10 @@ static int md_getattr(void *sock, const char* path) {
     return 0;
 }
 
+/**
+ * The getobjects call lists the object servers for a particular
+ * file system, as well as their roles.
+ */
 static int md_getobjects(void *sock) {
     char *errMsg = NULL;
     const char *tail = NULL;
@@ -168,6 +215,10 @@ static int md_getobjects(void *sock) {
     return 0;
 }
 
+/**
+ * The getfile call retrieves the file number if it exists, and
+ * sends it to the client, else it will return -1.
+ */
 static int md_getfile(void *sock, const char* path) {
     char *errMsg = NULL;
     const char *tail = NULL;
@@ -186,12 +237,19 @@ static int md_getfile(void *sock, const char* path) {
     return 0;
 }
 
+/**
+ * Emit a fatal error and exit.
+ */
 void error(const char* msg)
 {
     perror(msg);
     exit(1);
 }
 
+/**
+ * The main function for the MetadataSQLite process. It is
+ * not currently multiprocess.
+ */
 int main(int argc, char** argv) {
     md_open();
 
@@ -237,6 +295,10 @@ int main(int argc, char** argv) {
     return 0;
 }
 
+/**
+ * The dispatch method tokenizes the input and passes it
+ * on to the correct method which was invoked.
+ */
 int dispatch(char* str, int client) {
     FILE* stream = fdopen(client, "w");
     char* cmd;
