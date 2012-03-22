@@ -121,7 +121,26 @@ static int asd_open(const char *path, struct fuse_file_info *fi)
     if(file_num < 0)
         return -ENOENT;
 
-    fi->fh = file_num;
+    struct asd_file* fbuf = malloc(sizeof(struct asd_file));
+    mdc_getattr(host, path + 1, &fbuf->stbuf);
+    fbuf->path = strdup(path);
+    fbuf->id = file_num;
+    fi->fh = (uintptr_t) fbuf;
+
+    return 0;
+}
+
+static int asd_release(const char *path, struct fuse_file_info *fi)
+{
+    log("release called");
+
+    int file_num = mdc_getfile(host, path + 1);
+    if(file_num < 0)
+        return -ENOENT;
+
+    struct asd_file* fbuf = (struct asd_file*) fi->fh;
+    free(fbuf->path);
+    free(fbuf);
 
     return 0;
 }
@@ -133,22 +152,9 @@ static int asd_read(const char *path, char *buf, size_t size, off_t offset,
 
     pthread_rwlock_rdlock(&lock);
 
-    int file_size = -1;
-
-    // serialization point issue, must make two separate conditions
-    if(last_read.path != NULL) {
-        if(strcmp(last_read.path, path) == 0) {
-            file_size = last_read.size;
-        }
-    }
-
-    if(file_size < 0) {
-        struct stat stbuf;
-        mdc_getattr(host, path + 1, &stbuf);
-        file_size = stbuf.st_size;
-        last_read.path = strdup(path);
-        last_read.size = file_size;
-    }
+    struct asd_file* fbuf = (struct asd_file*) fi->fh;
+    int file_num  = fbuf->id;
+    int file_size = fbuf->stbuf.st_size;
 
     if(size + offset > file_size)
         size = file_size - offset;
@@ -157,16 +163,15 @@ static int asd_read(const char *path, char *buf, size_t size, off_t offset,
     int offInBlock = offset % BLOCK_SIZE;
     int bytesLeft = BLOCK_SIZE - offInBlock;
     int stripeNumber = block % NUMBER_STRIPES;
-    int file_num = fi->fh;
 
     if(size > bytesLeft) {
-        read_mirrored(*g_objs.pools[stripeNumber], NUMBER_MIRRORS, buf, bytesLeft, offInBlock + (BLOCK_SIZE * (block/NUMBER_STRIPES)), file_num, stripeNumber);
+        read_mirrored(g_objs.pools[stripeNumber], NUMBER_MIRRORS, buf, bytesLeft, offInBlock + (BLOCK_SIZE * (block/NUMBER_STRIPES)), file_num, stripeNumber);
         block++;
         stripeNumber = block % NUMBER_STRIPES;
         int unread = size - bytesLeft;
-        read_mirrored(*g_objs.pools[stripeNumber], NUMBER_MIRRORS, buf + bytesLeft, unread, BLOCK_SIZE * (block/NUMBER_STRIPES), file_num, stripeNumber);
+        read_mirrored(g_objs.pools[stripeNumber], NUMBER_MIRRORS, buf + bytesLeft, unread, BLOCK_SIZE * (block/NUMBER_STRIPES), file_num, stripeNumber);
     } else {
-        read_mirrored(*g_objs.pools[stripeNumber], NUMBER_MIRRORS, buf, size, offInBlock + (BLOCK_SIZE * (block/NUMBER_STRIPES)), file_num, stripeNumber);
+        read_mirrored(g_objs.pools[stripeNumber], NUMBER_MIRRORS, buf, size, offInBlock + (BLOCK_SIZE * (block/NUMBER_STRIPES)), file_num, stripeNumber);
     }
 
     pthread_rwlock_unlock(&lock);
@@ -181,32 +186,32 @@ static int asd_write(const char *path, const char *buf, size_t size, off_t offse
 
     pthread_rwlock_wrlock(&lock);
 
-    // serialization point issue, must make two separate conditions
-    if(last_file.path != NULL) { // & strcmp(last_file.path, path) != 0) {
-        if(strcmp(last_file.path, path) != 0) {
-            mdc_truncate(host, last_file.path + 1, last_file.size);
-            mdc_truncate(host, path + 1, size + offset);
-        }
-    }
+    struct asd_file* fbuf = (struct asd_file*) fi->fh;
+    int file_num  = fbuf->id;
+    int file_size = fbuf->stbuf.st_size;
 
-    last_file.path = strdup(path);
-    last_file.size = size + offset;
+    // Enlarge the file size to size + offset, if we are writing past
+    // the current EOF. Do not persist this with the metadata server,
+    // due to major bottleneck issues. Only persist on flushing the
+    // buffer.
+    if(size + offset > file_size) {
+        file_size = size + offset;
+        fbuf->stbuf.st_size = file_size;
+    }
 
     int block = offset / BLOCK_SIZE;
     int offInBlock = offset % BLOCK_SIZE;
     int bytesLeft = BLOCK_SIZE - offInBlock;
     int stripeNumber = block % NUMBER_STRIPES;
 
-    int file_num = fi->fh;
-
     if(size > bytesLeft) {
-        write_mirrored(*g_objs.pools[stripeNumber], NUMBER_MIRRORS, buf, bytesLeft, offInBlock + (BLOCK_SIZE * (block/NUMBER_STRIPES)), file_num, stripeNumber);
+        write_mirrored(g_objs.pools[stripeNumber], NUMBER_MIRRORS, buf, bytesLeft, offInBlock + (BLOCK_SIZE * (block/NUMBER_STRIPES)), file_num, stripeNumber);
         block++;
         stripeNumber = block % NUMBER_STRIPES;
         int unwritten = size - bytesLeft;
-        write_mirrored(*g_objs.pools[stripeNumber], NUMBER_MIRRORS, buf + bytesLeft, unwritten, BLOCK_SIZE * (block/NUMBER_STRIPES), file_num, stripeNumber);
+        write_mirrored(g_objs.pools[stripeNumber], NUMBER_MIRRORS, buf + bytesLeft, unwritten, BLOCK_SIZE * (block/NUMBER_STRIPES), file_num, stripeNumber);
     } else {
-        write_mirrored(*g_objs.pools[stripeNumber], NUMBER_MIRRORS, buf, size, offInBlock + (BLOCK_SIZE * (block/NUMBER_STRIPES)), file_num, stripeNumber);
+        write_mirrored(g_objs.pools[stripeNumber], NUMBER_MIRRORS, buf, size, offInBlock + (BLOCK_SIZE * (block/NUMBER_STRIPES)), file_num, stripeNumber);
     }
 
     pthread_rwlock_unlock(&lock);
@@ -224,18 +229,12 @@ static int asd_flush(const char *path, struct fuse_file_info *fi)
 {
     log("flush called on %s with last %s", path, last_file.path);
 
-    if(last_file.path != NULL) { // & strcmp(last_file.path, path) != 0) {
-        if(strcmp(last_file.path, path) == 0) {
-            mdc_truncate(host, last_file.path + 1, last_file.size);
-        }
-    }
+    struct asd_file* fbuf = (struct asd_file*) fi->fh;
+    int file_num  = fbuf->id;
+    int file_size = fbuf->stbuf.st_size;
 
-    return 0;
-}
+    mdc_truncate(host, path + 1, file_size);
 
-static int asd_release(const char *path, struct fuse_file_info *fi)
-{
-    log("release called");
     return 0;
 }
 
@@ -264,6 +263,7 @@ static struct fuse_operations asd_oper = {
     .chown   = asd_chown,
     .readdir = asd_readdir,
     .open    = asd_open,
+    .release = asd_release,
     .read    = asd_read,
     .unlink  = asd_unlink,
     .write   = asd_write,

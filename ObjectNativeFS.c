@@ -74,30 +74,29 @@ int main(int argc, char** argv) {
     return 0;
 }
 
-int store_data(int fd, struct obj_header head) {
-    // fprintf(stderr, "request to store data...");
-    // fprintf(stderr, "file request size: %zu, offset: %jd, file: %d, stripe: 
-    // %d\n", head.size, (intmax_t)head.offset, head.file, head.stripe);
-
+int store_data(int remote, struct obj_header head) {
     char identifier[512];
+    char buf[10000];
+
     snprintf(identifier, sizeof(identifier), "%s/%d.s%d", directory, head.file, head.stripe);
     int local = open(identifier, O_CREAT | O_RDWR, S_IWUSR | S_IRUSR );
 
-    int n;
+    int remaining = head.size;
+    int n = 1;
     lseek(local, head.offset, SEEK_SET);
-    while(n = read(fd, &buffer, sizeof(buffer))) {
-        fflush(stderr);
-        write(local, buffer, n);
+    while(remaining > 0 && n > 0) {
+        n = read(remote, buf, remaining > sizeof(buf) ? sizeof(buf) : remaining);
+        remaining -= n;
+        write(local, buf, n);
     }
 
     close(local);
-    // close(fd);
 
     return 0;
 }
 
 int retrieve_data(int remote, struct obj_header head) {
-    char identifier[256];
+    char identifier[512];
     char buf[10000];
 
     snprintf(identifier, sizeof(identifier), "%s/%d.s%d", directory, head.file, head.stripe);
@@ -109,13 +108,10 @@ int retrieve_data(int remote, struct obj_header head) {
     while(remaining > 0 && n > 0) {
         n = read(local, buf, remaining > sizeof(buf) ? sizeof(buf) : remaining);
         remaining -= n;
-        //while(n > 0) {
         write(remote, buf, n);
-        //}
     }
 
     close(local);
-    // close(remotefd);
 
     return 0;
 }

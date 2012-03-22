@@ -24,6 +24,7 @@ struct asd_pool* create_pool(struct asd_host host, int num_connections) {
         log("Connection with fd %d", pool->connections[i].fd);
     }
     pthread_mutex_init(&pool->mutex, NULL);
+    log("Pool has addr %d", pool);
     return pool;
 };
 

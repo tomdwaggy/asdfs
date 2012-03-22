@@ -1,6 +1,8 @@
 #ifndef __STRUCTURES_H
 #define __STRUCTURES_H
 
+#include <sys/stat.h>
+
 #define BLOCK_SIZE 1000000
 #define BUFFER_SIZE 10000
 #define NUMBER_STRIPES 2
@@ -51,7 +53,8 @@ struct asd_objects {
 // name and path. Many operations happen sequentially,
 // with the same file, this is for a basic LRU cache.
 struct asd_file {
-    int size;
+    int id;
+    struct stat stbuf;
     char* path;
 };
 

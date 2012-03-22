@@ -13,7 +13,9 @@ char destroy_buffer[10000];
 
 int write_remote(struct asd_pool* pool, const char* buf, struct obj_header head) {
     int sockfd, n;
+    log("trying to get a writer connection with pool %d", pool);
     sockfd = get_connection_b(pool);
+    log("%d sockfd for writing", sockfd);
 
     write(sockfd, &head, sizeof(head));
     n = write(sockfd, buf, head.size);
@@ -59,7 +61,7 @@ int read_remote(struct asd_pool* pool, char* buf, struct obj_header head) {
     return offset + n;
 }
 
-int write_mirrored(struct asd_pool* pools, int nhosts, const char* buf, size_t size, off_t offset, int file, int stripe) {
+int write_mirrored(struct asd_pool** pools, int nhosts, const char* buf, size_t size, off_t offset, int file, int stripe) {
 
     log("Writing objects data to stripe mirrors.");
     int i, n;
@@ -71,13 +73,13 @@ int write_mirrored(struct asd_pool* pools, int nhosts, const char* buf, size_t s
         head.offset = offset;
         head.file   = file;
         head.stripe = stripe;
-        n += write_remote(pools + i, buf, head);
+        n += write_remote(pools[i], buf, head);
     }
 
     return n;
 }
 
-int read_mirrored(struct asd_pool* pools, int nhosts, char* buf, size_t size, off_t offset, int file, int stripe) {
+int read_mirrored(struct asd_pool** pools, int nhosts, char* buf, size_t size, off_t offset, int file, int stripe) {
 
     log("Reading objects data from stripe mirrors.");
     int i = 0, n = 0;
@@ -88,7 +90,7 @@ int read_mirrored(struct asd_pool* pools, int nhosts, char* buf, size_t size, of
         head.offset = offset;
         head.file   = file;
         head.stripe = stripe;
-        if((n = read_remote(pools + i, buf, head)) > 0)
+        if((n = read_remote(pools[i], buf, head)) > 0)
             break;
     }
 
