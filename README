@@ -1,3 +1,13 @@
+ASDFS
+=====
+
+The ASDFS (Amazingly Simple Distributed File System) is a FUSE based 
+file system implementing a POSIX API on top of a distributed RAID 10 
+mirrored storage.
+
+Using ASDFS
+-----------
+
 Building the application
 
 $ make
