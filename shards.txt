@@ -1,0 +1,15 @@
+# shards.txt is the setup for the mapping
+# between RAID stripes and mirrors, and
+# object servers.
+
+# Format
+# stripe mirror hostname port
+
+0 0 localhost 2090
+0 1 localhost 2091
+1 0 localhost 2091
+1 1 localhost 2090
+2 0 localhost 2092
+2 1 localhost 2093
+3 0 localhost 2093
+3 1 localhost 2092
