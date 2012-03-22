@@ -1,0 +1,20 @@
+Building the application
+
+$ make
+
+Formatting the file system
+
+$ rm metadata.db
+$ sqlite3 metadata.db < metadata.sql
+
+Running the metadata server
+
+$ ./MetadataSQLite <port number>
+
+Running the object store
+
+$ ./ObjectNativeFS <directory> <port number>
+
+Mounting the file system
+
+$ ./asdfs <mountpoint> -ohost=<metadata hostname>,port=<metadata port number>
