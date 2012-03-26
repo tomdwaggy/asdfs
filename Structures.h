@@ -18,12 +18,19 @@ struct asd_host {
     int port;
 };
 
+// A connection object, containing a file descriptor,
+// whether or not it is available, and a mutex to lock
+// the connection.
 struct asd_connection {
     int fd;
     int available;
     pthread_mutex_t mutex;
 };
 
+// A pool of connections, which contains an array of
+// connection objects, a host object specifying what
+// host the pool is for, and a number of connections
+// that are supported.
 struct asd_pool {
     pthread_mutex_t mutex;
     struct asd_host host;
