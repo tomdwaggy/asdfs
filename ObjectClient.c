@@ -9,8 +9,6 @@
 
 #include "ClientConnectionPool.h"
 
-char destroy_buffer[10000];
-
 int write_remote(struct asd_pool* pool, const char* buf, struct obj_header head) {
     int sockfd, n;
     log("trying to get a writer connection with pool %d", pool);
@@ -19,9 +17,6 @@ int write_remote(struct asd_pool* pool, const char* buf, struct obj_header head)
 
     write(sockfd, &head, sizeof(head));
     n = write(sockfd, buf, head.size);
-
-    //head.op = OP_DONE;
-    //write(sockfd, &head, sizeof(head));
 
     release_connection(pool, sockfd);
 
@@ -42,19 +37,9 @@ int read_remote(struct asd_pool* pool, char* buf, struct obj_header head) {
     while(remaining > 0 && n > 0) {
         n = read(sockfd, buf + offset, remaining);
         log("just read %d bytes", n);
-        // memcpy(buf + offset, rbuffer, n);
         remaining -= n;
         offset += n;
     }
-
-    if( n < 0 ) {
-        log("SOCKET HAS FAILED!");
-    }
-
-//    while(n > 0) {
-//        n = recv(sockfd, destroy_buffer, sizeof(destroy_buffer), 
-// MSG_DONTWAIT);
-//    }
 
     release_connection(pool, sockfd);
 
