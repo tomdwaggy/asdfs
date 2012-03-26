@@ -1,7 +1,7 @@
-/*
-   This is the NativeFS implementation for the object servers, which
-   stores data on an underlying filesystem.
-*/
+//
+// This is the NativeFS implementation for the object servers, which
+// stores data on an underlying filesystem.
+//
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,14 +18,16 @@
 #include "Structures.h"
 
 static char* directory;
-static char buffer[BLOCK_SIZE];
 
+// A fatal error has occurred.
 void error(const char* msg)
 {
     perror(msg);
     exit(1);
 }
 
+// The main loop for the listener, will spawn off multiple child
+// processes.
 int main(int argc, char** argv) {
     int sockfd, newsockfd, port;
     socklen_t clilen;
@@ -47,33 +49,39 @@ int main(int argc, char** argv) {
     if(bind(sockfd, (struct sockaddr*) &serv_addr, sizeof(serv_addr)) < 0)
         error("Can't bind to port!");
 
-    /* We don't want to fill up the process table. */
+    // We don't want to fill up the process table, and we don't care
+    // about any of the children's state. 
     signal(SIGCHLD, SIG_IGN);
     listen(sockfd, 25);
 
+    // Listen for connections.
     while( 1 ) {
         clilen = sizeof(cli_addr);
         newsockfd = accept(sockfd, (struct sockaddr*) &cli_addr, &clilen);
         if (newsockfd < 0)
             error("Error on accept.");
 
+        // Fork off a new child process.
         pid_t pID = fork();
         if(pID == 0) {
-            // close socket fd for the handler
+            // Close socket FDs that child does not need.
             close(sockfd);
             dispatch(newsockfd);
             close(newsockfd);
             exit(0);
         }
-        // close socket fd for the listener
+        // Close socket FD that is not needed for parent (listener)
         close(newsockfd);
     }
 
+    // Close the listener socket.
     close(sockfd);
 
     return 0;
 }
 
+// This method is called when a command to store data to the object 
+// store is received.
 int store_data(int remote, struct obj_header head) {
     char identifier[512];
     char buf[10000];
@@ -95,6 +103,8 @@ int store_data(int remote, struct obj_header head) {
     return 0;
 }
 
+// This method is called when a command to retrieve data from the object
+// store is received.
 int retrieve_data(int remote, struct obj_header head) {
     char identifier[512];
     char buf[10000];
@@ -116,6 +126,8 @@ int retrieve_data(int remote, struct obj_header head) {
     return 0;
 }
 
+// This method reads the next command in the input stream, on a 
+// particular socket, to determine whether to read or write.
 int dispatch(int fd) {
     struct obj_header head;
     do {

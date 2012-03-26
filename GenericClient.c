@@ -7,13 +7,14 @@
 #include "Logger.h"
 #include "Structures.h"
 
-int connect_to_server_t(struct asd_host host, int socktype)
+// Connect to the server with a given host and port.
+int connect_to_server(struct asd_host host)
 {
     int sockfd;
     struct sockaddr_in serv_addr;
     struct hostent *server;
 
-    sockfd = socket(AF_INET, socktype, 0);
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0)
         log("Error opening socket");
     server = gethostbyname(host.hostname);
@@ -31,8 +32,4 @@ int connect_to_server_t(struct asd_host host, int socktype)
     }
 
     return sockfd;
-}
-
-int connect_to_server(struct asd_host host) {
-    return connect_to_server_t(host, SOCK_STREAM);
 }
