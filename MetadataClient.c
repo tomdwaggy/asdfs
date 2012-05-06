@@ -31,12 +31,12 @@ int mdc_chown(struct asd_host host, const char* path, uid_t uid, gid_t gid){
     return 0;
 }
 
-int mdc_truncate(struct asd_host host, const char* path, off_t size){
+int mdc_truncate(struct asd_host host, const char* path, unsigned long long size){
     log("Sending command to server to truncate node.");
     int sockfd, n;
     sockfd = connect_to_server(host);
     char str[512];
-    snprintf(str, sizeof(str), "truncate|%s|%jd", path,  (intmax_t) size);
+    snprintf(str, sizeof(str), "truncate|%s|%llu", path,  (unsigned long long) size);
     n = write(sockfd, str, strlen(str));
     close(sockfd);
     return 0;

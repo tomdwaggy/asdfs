@@ -11,6 +11,7 @@
 #define OP_WRITE 0
 #define OP_READ  1
 #define OP_DONE  2
+#define OP_NONE  3
 
 // A hostname and port pair.
 struct asd_host {
@@ -33,6 +34,7 @@ struct asd_connection {
 // that are supported.
 struct asd_pool {
     pthread_mutex_t mutex;
+    int alive;
     struct asd_host host;
     int num_connections;
     struct asd_connection* connections;

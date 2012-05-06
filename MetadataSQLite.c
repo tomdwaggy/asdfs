@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <inttypes.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -64,14 +65,14 @@ void md_done(int rc) {
 /**
  * The truncate system call sets the file size in the database.
  */
-static int md_truncate(const char* path, off_t size) {
+static int md_truncate(const char* path, unsigned long long size) {
     sqlite3_stmt *stmt = NULL;
     const char *tail = NULL;
     int rc;
     rc = sqlite3_prepare(md_db,
         "UPDATE File SET bytes=? WHERE name=?", 1024, &stmt, &tail);
     md_clerr(rc);
-    sqlite3_bind_int(stmt, 1, size);
+    sqlite3_bind_int64(stmt, 1, (long long)size);
     sqlite3_bind_text(stmt, 2, path, strlen(path), SQLITE_STATIC);
     rc = sqlite3_step(stmt);
     md_done(rc);
@@ -180,8 +181,8 @@ static int md_getattr(void *sock, const char* path) {
         "SELECT mode,bytes,uid,gid,atime,mtime,ctime FROM File WHERE name=?", 1024, &stmt, &tail );
     sqlite3_bind_text(stmt, 1, path, strlen(path), SQLITE_STATIC);
     if((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
-        fprintf(sock, "%d %d %d %d %d %d\n", sqlite3_column_int(stmt, 0),
-                                    sqlite3_column_int(stmt, 1),
+        fprintf(sock, "%d %llu %d %d %d %d\n", sqlite3_column_int(stmt, 0),
+                                    (unsigned long long)sqlite3_column_int64(stmt, 1),
                                     sqlite3_column_int(stmt, 2),
                                     sqlite3_column_int(stmt, 3),
                                     sqlite3_column_int(stmt, 4),
@@ -317,8 +318,9 @@ int dispatch(char* str, int client) {
         md_unlink(name);
     } else if(strcmp(cmd, "truncate") == 0) {
         char* name = strtok(NULL, "|");
-        int size = atoi(strtok(NULL, "|"));
-        printf("'truncate' '%s' '%d' received\n", name, size);
+	char* end;
+        unsigned long long size = strtoull(strtok(NULL, "|"), &end, 10);
+        printf("'truncate' '%s' '%llu' received\n", name, size);
         md_truncate(name, size);
     } else if(strcmp(cmd, "getattr") == 0) {
         char* name = strtok(NULL, "|");

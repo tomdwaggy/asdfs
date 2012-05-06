@@ -7,6 +7,7 @@
 #include <string.h>
 #include <errno.h>
 #include <pthread.h>
+#include <signal.h>
 #include <fuse.h>
 
 #include "Logger.h"
@@ -304,7 +305,13 @@ int main(int argc, char *argv[])
 {
     struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
     struct asd_config conf;
-    
+
+    struct sigaction new_actn, old_actn;
+    new_actn.sa_handler = SIG_IGN;
+    sigemptyset (&new_actn.sa_mask);
+    new_actn.sa_flags = 0;
+    sigaction (SIGPIPE, &new_actn, &old_actn);
+
     memset(&conf, 0, sizeof(conf));
     fuse_opt_parse(&args, &conf, asd_opts, asd_opt_proc);
     host.hostname = conf.hostname;

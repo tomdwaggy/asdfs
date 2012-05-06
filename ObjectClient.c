@@ -11,9 +11,9 @@
 
 int write_remote(struct asd_pool* pool, const char* buf, struct obj_header head) {
     int sockfd, n;
-    log("trying to get a writer connection with pool %d", pool);
+    log("[INFO][WRITE] Trying to get a Writer connection with Connection Pool (%p)", pool);
     sockfd = get_connection_b(pool);
-    log("%d sockfd for writing", sockfd);
+    log("[INFO][WRITE] Found a free FD for writing (%d)", sockfd);
 
     write(sockfd, &head, sizeof(head));
     n = write(sockfd, buf, head.size);
@@ -25,10 +25,20 @@ int write_remote(struct asd_pool* pool, const char* buf, struct obj_header head)
 
 int read_remote(struct asd_pool* pool, char* buf, struct obj_header head) {
     int sockfd;
-    log("trying to get a reader connection with pool %d", pool);
+    log("[INFO][READ] Trying to get a Reader connection with Connection Pool (%p)", pool);
     sockfd = get_connection_b(pool);
-    log("%d sockfd read", sockfd);
-    write(sockfd, &head, sizeof(head));
+    log("[INFO][READ] Found a free FD for reading (%d)", sockfd);
+
+    if(sockfd < 0) {
+        log("[ERROR][READ] Trying to read from a dead socket...");
+        return 0;
+    }
+
+    int written = write(sockfd, &head, sizeof(head));
+    if(written <= 0) {
+        try_reconnect(pool, sockfd);
+        return 0;
+    }
 
     int remaining = head.size;
 
@@ -36,7 +46,13 @@ int read_remote(struct asd_pool* pool, char* buf, struct obj_header head) {
     int offset = 0;
     while(remaining > 0 && n > 0) {
         n = read(sockfd, buf + offset, remaining);
-        log("just read %d bytes", n);
+
+        if(n <= 0) {
+            try_reconnect(pool, sockfd);
+            return 0;
+        }
+
+        log("[INFO][READ] Read %d bytes", n);
         remaining -= n;
         offset += n;
     }
@@ -48,7 +64,7 @@ int read_remote(struct asd_pool* pool, char* buf, struct obj_header head) {
 
 int write_mirrored(struct asd_pool** pools, int nhosts, const char* buf, size_t size, off_t offset, int file, int stripe) {
 
-    log("Writing objects data to stripe mirrors.");
+    log("[INFO] Writing objects data to stripe mirrors.");
     int i, n;
     n = 0;
     for(i = 0; i < nhosts; i++) {
@@ -66,7 +82,7 @@ int write_mirrored(struct asd_pool** pools, int nhosts, const char* buf, size_t 
 
 int read_mirrored(struct asd_pool** pools, int nhosts, char* buf, size_t size, off_t offset, int file, int stripe) {
 
-    log("Reading objects data from stripe mirrors.");
+    log("[INFO] Reading objects data from stripe mirrors.");
     int i = 0, n = 0;
     for(i = 0; i < nhosts; i++) {
         struct obj_header head;

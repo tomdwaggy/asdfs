@@ -26,7 +26,7 @@ CREATE TABLE File (
                    repl            INTEGER
 );
 
-INSERT INTO File VALUES (1, "Hello", 1000, 1000, 11, 512, 1, 33188, 0, 0, 0, 1);
+-- INSERT INTO File VALUES (1, "Hello", 1000, 1000, 11, 512, 1, 33188, 0, 0, 0, 1);
 
 
 -- StoreAddress relation, containing a mapping from store ids to the

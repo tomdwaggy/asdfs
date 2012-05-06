@@ -80,7 +80,7 @@ int main(int argc, char** argv) {
     return 0;
 }
 
-// This method is called when a command to store data to the object 
+// This method is called when a command to store data to the object
 // store is received.
 int store_data(int remote, struct obj_header head) {
     char identifier[512];
@@ -129,6 +129,7 @@ int retrieve_data(int remote, struct obj_header head) {
 // This method reads the next command in the input stream, on a 
 // particular socket, to determine whether to read or write.
 int dispatch(int fd) {
+    char nbuf[1];
     struct obj_header head;
     do {
         read(fd, &head, sizeof(head));
@@ -137,6 +138,9 @@ int dispatch(int fd) {
         }
         else if(head.op == OP_READ) {
             retrieve_data(fd, head);
+        }
+        else if(head.op == OP_NONE) {
+            send(fd, nbuf, sizeof(char), 0);
         }
     } while (head.op != OP_DONE);
 }
