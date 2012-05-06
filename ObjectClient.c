@@ -15,8 +15,24 @@ int write_remote(struct asd_pool* pool, const char* buf, struct obj_header head)
     sockfd = get_connection_b(pool);
     log("[INFO][WRITE] Found a free FD for writing (%d)", sockfd);
 
-    write(sockfd, &head, sizeof(head));
+    if(sockfd < 0) {
+        log("[ERROR][WRITE] Tried to write to a dead socket.");
+        return 0;
+    }
+
+    int written = write(sockfd, &head, sizeof(head));
+
+    if(written <= 0) {
+        try_reconnect(pool, sockfd);
+        return 0;
+    }
+
     n = write(sockfd, buf, head.size);
+
+    if(n <= 0) {
+        try_reconnect(pool, sockfd);
+        return 0;
+    }
 
     release_connection(pool, sockfd);
 
@@ -30,7 +46,7 @@ int read_remote(struct asd_pool* pool, char* buf, struct obj_header head) {
     log("[INFO][READ] Found a free FD for reading (%d)", sockfd);
 
     if(sockfd < 0) {
-        log("[ERROR][READ] Trying to read from a dead socket...");
+        log("[ERROR][READ] Tried to read from a dead socket.");
         return 0;
     }
 
