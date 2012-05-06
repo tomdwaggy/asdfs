@@ -10,7 +10,7 @@
 #include "Logger.h"
 
 int mdc_mknod(struct asd_host host, const char* path, mode_t mode){
-    log("Sending command to server to create node.");
+    log("[INFO][METADATA] Sending command to server to create node.");
     int sockfd, n;
     sockfd = connect_to_server(host);
     char str[512];
@@ -21,7 +21,7 @@ int mdc_mknod(struct asd_host host, const char* path, mode_t mode){
 }
 
 int mdc_chown(struct asd_host host, const char* path, uid_t uid, gid_t gid){
-    log("Sending command to server to change node owner.");
+    log("[INFO][METADATA] Sending command to server to change node owner.");
     int sockfd, n;
     sockfd = connect_to_server(host);
     char str[512];
@@ -32,7 +32,7 @@ int mdc_chown(struct asd_host host, const char* path, uid_t uid, gid_t gid){
 }
 
 int mdc_truncate(struct asd_host host, const char* path, unsigned long long size){
-    log("Sending command to server to truncate node.");
+    log("[INFO][METADATA] Sending command to server to truncate node.");
     int sockfd, n;
     sockfd = connect_to_server(host);
     char str[512];
@@ -43,7 +43,7 @@ int mdc_truncate(struct asd_host host, const char* path, unsigned long long size
 }
 
 int mdc_unlink(struct asd_host host, const char* path){
-    log("Sending command to server to unlink node.");
+    log("[INFO][METADATA] Sending command to server to unlink node.");
     int sockfd, n;
     sockfd = connect_to_server(host);
     char str[512];
@@ -56,7 +56,7 @@ int mdc_unlink(struct asd_host host, const char* path){
 int mdc_readdir(struct asd_host host, const char *path, void *buf, 
                         fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
     int sockfd, n;
-    log("Reading directory data from server.");
+    log("[INFO][METADATA] Reading directory data from server.");
     sockfd = connect_to_server(host);
     n = write(sockfd, "readdir", strlen("readdir"));
     FILE* stream = fdopen(sockfd, "r");
@@ -76,7 +76,7 @@ int mdc_readdir(struct asd_host host, const char *path, void *buf,
 struct asd_objects mdc_getobjects(struct asd_host host) {
     int sockfd, n;
     struct asd_objects objs;
-    log("Reading file objects data from server.");
+    log("[INFO][METADATA] Reading file objects data from server.");
     sockfd = connect_to_server(host);
     char str[512];
     snprintf(str, sizeof(str), "getobjects");
@@ -106,7 +106,7 @@ struct asd_objects mdc_getobjects(struct asd_host host) {
 
 int mdc_getattr(struct asd_host host, const char* path, struct stat* stbuf) {
     int sockfd, n;
-    log("Getting attributes from server.");
+    log("[INFO][METADATA] Getting attributes from server.");
     sockfd = connect_to_server(host);
     char str[512];
     snprintf(str, sizeof(str), "getattr|%s", path);
@@ -138,7 +138,7 @@ int mdc_getfile(struct asd_host host, const char* path) {
     int sockfd, n;
     int ret = 0;
 
-    log("Getting attributes from server.");
+    log("[INFO][METADATA] Getting file number from server.");
     sockfd = connect_to_server(host);
     char str[512];
     snprintf(str, sizeof(str), "getfile|%s", path);
