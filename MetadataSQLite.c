@@ -154,6 +154,26 @@ static int md_unlink(const char* path) {
 }
 
 /**
+ * This function deletes an invalidated file, when an object server has recovered it.
+ */
+static int md_setvalid(int file, char* hostname, int port) {
+    sqlite3_stmt *stmt = NULL;
+    const char *tail = NULL;
+    int rc;
+    rc = sqlite3_prepare(md_db,
+        "DELETE FROM Invalid WHERE file=? AND store IN (SELECT store FROM StoreAddress WHERE addr=? AND PORT=?)",
+        1024,
+        &stmt, &tail );
+    md_clerr(rc);
+    sqlite3_bind_int(stmt, 1, file);
+    sqlite3_bind_text(stmt, 2, hostname, strlen(hostname), SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 3, port);
+    rc = sqlite3_step(stmt);
+    md_done(rc);
+    return 0;
+}
+
+/**
  * The readdir call back.
  * TODO: Implement md_readdir with the callback free API
  */
@@ -387,6 +407,12 @@ int dispatch(char* str, int client) {
         char* hostname = strtok(NULL, "|");
         int port = atoi(strtok(NULL, "|"));
         md_getinvalid(stream, hostname, port);
+    } else if(strcmp(cmd, "setvalid") == 0) {
+        printf("'setvalid' received\n");
+        int file = atoi(strtok(NULL, "|"));
+        char* hostname = strtok(NULL, "|");
+        int port = atoi(strtok(NULL, "|"));
+        md_setvalid(file, hostname, port);
     }
     return 0;
 }

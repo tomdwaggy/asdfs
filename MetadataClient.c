@@ -20,6 +20,17 @@ int mdc_invalidate(struct asd_host host, struct asd_host slave, int file, int st
     return 0;
 }
 
+int mdc_setvalid(struct asd_host host, struct asd_host slave, int file, char* hostname, int port){
+    log("[INFO][METADATA] Sending command to server to validate a file.");
+    int sockfd, n;
+    sockfd = connect_to_server_wslave(host, slave);
+    char str[512];
+    snprintf(str, sizeof(str), "setvalid|%d|%s|%d", file, hostname, port);
+    n = write(sockfd, str, strlen(str));
+    close(sockfd);
+    return 0;
+}
+
 int mdc_mknod(struct asd_host host, struct asd_host slave, const char* path, mode_t mode){
     log("[INFO][METADATA] Sending command to server to create node.");
     int sockfd, n;

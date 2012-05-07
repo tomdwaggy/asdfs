@@ -12,6 +12,7 @@
 #define OP_READ  1
 #define OP_DONE  2
 #define OP_NONE  3
+#define OP_READALL 4
 
 // A hostname and port pair.
 struct asd_host {

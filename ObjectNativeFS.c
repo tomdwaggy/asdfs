@@ -48,7 +48,7 @@ void recover_file(int file_num, intmax_t file_size) {
                 int success = 1;
                 printf("Connected to a peer object server with FD %d\n", fd);
                 struct obj_header head;
-                head.op = OP_READ;
+                head.op = OP_READALL;
                 head.file = file_num;
                 head.stripe = stripe;
                 head.size = file_size;
@@ -63,9 +63,18 @@ void recover_file(int file_num, intmax_t file_size) {
                     success = 0;
                 }
 
+                printf("Trying to read from socket...\n");
+                int rd = read(fd, &head, sizeof(head));
+                if ( rd < 0 ) {
+                    printf("Error reading new header from socket...\n");
+                }
+                printf("Read a header from the socket... Remaining? %jd\n", head.size);
+
                 int remaining = head.size;
+                if(remaining == 0)
+                    printf("No data needs to be transferred...\n");
+
                 int n = 1;
-                lseek64(local, head.offset, SEEK_SET);
                 while(remaining > 0 && n > 0) {
                     int toRead = (remaining > sizeof(buf)) ? sizeof(buf) : remaining;
                     n = read(fd, buf, toRead);
@@ -81,6 +90,8 @@ void recover_file(int file_num, intmax_t file_size) {
                         printf("Couldn't write to the disk at file %s\n", identifier);
                     }
                 }
+                head.op = OP_DONE;
+                write(fd, &head, sizeof(head));
                 close(fd);
                 close(local);
                 if(success == 1)
@@ -88,6 +99,7 @@ void recover_file(int file_num, intmax_t file_size) {
             }
         }
     }
+    printf("Recover file done...\n");
 }
 
 // The main loop for the listener, will spawn off multiple child
@@ -125,6 +137,8 @@ int main(int argc, char** argv) {
         for(ii = 0; ii < 255 && iarray[ii] != 0; ii++) {
             printf("Invalid file found: %d - size %jd\n", iarray[ii], sarray[ii]);
             recover_file(iarray[ii], sarray[ii]);
+            printf("Trying to force validation...\n");
+            mdc_setvalid(mdhost, mdslave, iarray[ii], argv[2], atoi(argv[3]));
         }
     }
     // Done with processing invalids
@@ -217,6 +231,35 @@ int retrieve_data(int remote, struct obj_header head) {
     return 0;
 }
 
+// This method is called when a command to retrieve data from the object
+// store is received.
+int retrieve_all_data(int remote, struct obj_header head) {
+    char identifier[512];
+    char buf[10000];
+
+    snprintf(identifier, sizeof(identifier), "%s/%d.s%d", directory, head.file, head.stripe);
+    int local = open(identifier, O_RDONLY);
+
+    lseek64(local, 0L, SEEK_END);
+    head.op = OP_READALL;
+    struct stat st;
+    stat(identifier, &st);
+    head.size = st.st_size;
+    write(remote, &head, sizeof(head));
+    int remaining = head.size;
+    int n = 1;
+    lseek64(local, 0, SEEK_SET);
+    while(remaining > 0 && n > 0) {
+        n = read(local, buf, remaining > sizeof(buf) ? sizeof(buf) : remaining);
+        remaining -= n;
+        write(remote, buf, n);
+    }
+
+    close(local);
+
+    return 0;
+}
+
 // This method reads the next command in the input stream, on a 
 // particular socket, to determine whether to read or write.
 int dispatch(int fd) {
@@ -232,6 +275,9 @@ int dispatch(int fd) {
         }
         else if(head.op == OP_NONE) {
             send(fd, nbuf, sizeof(char), 0);
+        }
+        else if(head.op == OP_READALL) {
+            retrieve_all_data(fd, head);
         }
     } while (head.op != OP_DONE);
 }

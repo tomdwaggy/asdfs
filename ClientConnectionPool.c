@@ -14,6 +14,7 @@ void try_reconnect(struct asd_pool* pool, int sockfd) {
     int fdi;
     for(fdi = 0; fdi < pool->num_connections; fdi++) {
     if(pool->connections[fdi].fd == sockfd) {
+        close(pool->connections[fdi].fd);
         pool->connections[fdi].fd = connect_to_server(pool->host.hostname, pool->host.port);
         sockfd = pool->connections[fdi].fd;
         log("[ERROR][POOL] Socket died, attempted a reconnect with FD %d", sockfd);
@@ -22,6 +23,7 @@ void try_reconnect(struct asd_pool* pool, int sockfd) {
         int status = send(sockfd, &head, sizeof(head), MSG_NOSIGNAL);
         if(status < 0) {
             log("[ERROR][POOL] Host is DEAD, result of send(NOOP) is %d", status);
+            close(pool->connections[fdi].fd);
             pthread_mutex_unlock(&pool->connections[fdi].mutex);
             pool->connections[fdi].fd = -1;
             pool->alive = 0;

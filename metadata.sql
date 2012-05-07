@@ -28,6 +28,14 @@ CREATE TABLE File (
 
 -- INSERT INTO File VALUES (1, "Hello", 1000, 1000, 11, 512, 1, 33188, 0, 0, 0, 1);
 
+-- Invalidated data table, which contains file id and store stating
+-- that a file is invalidated on a particular data store.
+
+CREATE TABLE Invalid (
+                        inv         INTEGER PRIMARY KEY,
+                        file        INTEGER NOT NULL,
+                        store       INTEGER NOT NULL
+);
 
 -- StoreAddress relation, containing a mapping from store ids to the
 -- server address, which is just an IP or hostname which must be

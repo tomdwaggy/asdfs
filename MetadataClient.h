@@ -1,3 +1,5 @@
+int mdc_setvalid(struct asd_host host, struct asd_host slave, int file, char* hostname, int port);
+
 int mdc_invalidate(struct asd_host host, struct asd_host slave, int file, int store);
 
 int mdc_mknod(struct asd_host host, struct asd_host slave, const char* path, mode_t mode);
