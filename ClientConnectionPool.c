@@ -82,17 +82,19 @@ int get_connection_b(struct asd_pool* pool) {
     log("[INFO][POOL] Scanning %d Connections in Pool %p", pool->num_connections, pool);
     int i, fd = -1;
     while(fd < 0) {
-        pthread_mutex_lock(&pool->mutex);
+        // pthread_mutex_lock(&pool->mutex);
         for(i = 0; i < pool->num_connections; i++) {
-            if(pool->connections[i].available = 1) {
-                pool->connections[i].available = 0;
+            log("[INFO][POOL] Trying lock on Connection %d", i);
+            int trylock = pthread_mutex_trylock(&pool->connections[i].mutex);
+            if(trylock == 0) {
+                // pool->connections[i].available = 0;
                 fd = pool->connections[i].fd;
+                // pthread_mutex_lock(&pool->connections[i].mutex);
                 break;
             }
         }
-        pthread_mutex_unlock(&pool->mutex);
+        // pthread_mutex_unlock(&pool->mutex);
     }
-    pthread_mutex_lock(&pool->connections[i].mutex);
     return fd;
 };
 

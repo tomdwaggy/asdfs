@@ -362,6 +362,11 @@ int dispatch(char* str, int client) {
     FILE* stream = fdopen(client, "w");
     char* cmd;
     cmd = strtok(str, "|");
+
+    // There was no command...
+    if(cmd == NULL)
+        return 0;
+
     if(strcmp(cmd, "readdir") == 0) {
         printf("'readdir' received\n");
         md_readdir(stream, "/");

@@ -125,6 +125,8 @@ static int asd_open(const char *path, struct fuse_file_info *fi)
     if(file_num < 0)
         return -ENOENT;
 
+    log("[FUSE][INFO] File number returned is %d", file_num);
+
     struct asd_file* fbuf = malloc(sizeof(struct asd_file));
     mdc_getattr(host, slave, path + 1, &fbuf->stbuf);
     fbuf->path = strdup(path);
