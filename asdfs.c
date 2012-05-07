@@ -21,7 +21,9 @@ pthread_rwlock_t lock;
 
 struct asd_config {
     char* hostname;
+    char* slavehostname;
     int port;
+    int slaveport;
 };
 
 enum {
@@ -33,19 +35,20 @@ static struct asd_file last_file;
 static struct asd_file last_read;
 
 static struct asd_host host;
+static struct asd_host slave;
 static struct asd_objects g_objs;
 
 static int asd_mknod(const char *path, mode_t mode, dev_t dev)
 {
     log("mknod called");
-    mdc_mknod(host, path + 1, mode);
+    mdc_mknod(host, slave, path + 1, mode);
     return 0;
 }
 
 static int asd_unlink(const char *path)
 {
     log("unlink called");
-    mdc_unlink(host, path + 1);
+    mdc_unlink(host, slave, path + 1);
     return 0;
 }
 
@@ -64,14 +67,14 @@ static int asd_chmod(const char *path, mode_t mode)
 static int asd_chown(const char *path, uid_t uid, gid_t gid)
 {
     log("chown called");
-    mdc_chown(host, path + 1, uid, gid);
+    mdc_chown(host, slave, path + 1, uid, gid);
     return 0;
 }
 
 static int asd_truncate(const char *path, off_t newsize)
 {
     log("truncate called");
-    mdc_truncate(host, path + 1, newsize);
+    mdc_truncate(host, slave, path + 1, newsize);
     return 0;
 }
 
@@ -92,7 +95,7 @@ static int asd_getattr(const char *path, struct stat *stbuf)
     }
     else {
         stbuf->st_nlink = 1;
-        res = mdc_getattr(host, path + 1, stbuf);
+        res = mdc_getattr(host, slave, path + 1, stbuf);
     }
 
     return res;
@@ -109,7 +112,7 @@ static int asd_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
     filler(buf, ".", NULL, 0);
     filler(buf, "..", NULL, 0);
-    mdc_readdir(host, path, buf, filler, offset, fi);
+    mdc_readdir(host, slave, path, buf, filler, offset, fi);
 
     return 0;
 }
@@ -118,12 +121,12 @@ static int asd_open(const char *path, struct fuse_file_info *fi)
 {
     log("open called");
 
-    int file_num = mdc_getfile(host, path + 1);
+    int file_num = mdc_getfile(host, slave, path + 1);
     if(file_num < 0)
         return -ENOENT;
 
     struct asd_file* fbuf = malloc(sizeof(struct asd_file));
-    mdc_getattr(host, path + 1, &fbuf->stbuf);
+    mdc_getattr(host, slave, path + 1, &fbuf->stbuf);
     fbuf->path = strdup(path);
     fbuf->id = file_num;
     fi->fh = (uintptr_t) fbuf;
@@ -135,7 +138,7 @@ static int asd_release(const char *path, struct fuse_file_info *fi)
 {
     log("release called");
 
-    int file_num = mdc_getfile(host, path + 1);
+    int file_num = mdc_getfile(host, slave, path + 1);
     if(file_num < 0)
         return -ENOENT;
 
@@ -155,21 +158,21 @@ static int asd_read(const char *path, char *buf, size_t size, off_t offset,
 
     struct asd_file* fbuf = (struct asd_file*) fi->fh;
     int file_num  = fbuf->id;
-    int file_size = fbuf->stbuf.st_size;
+    off_t file_size = fbuf->stbuf.st_size;
 
     if(size + offset > file_size)
         size = file_size - offset;
-	
-    int block = offset / BLOCK_SIZE;
-    int offInBlock = offset % BLOCK_SIZE;
-    int bytesLeft = BLOCK_SIZE - offInBlock;
+
+    off_t block = offset / BLOCK_SIZE;
+    off_t offInBlock = offset % BLOCK_SIZE;
+    off_t bytesLeft = BLOCK_SIZE - offInBlock;
     int stripeNumber = block % NUMBER_STRIPES;
 
     if(size > bytesLeft) {
         read_mirrored(g_objs.pools[stripeNumber], NUMBER_MIRRORS, buf, bytesLeft, offInBlock + (BLOCK_SIZE * (block/NUMBER_STRIPES)), file_num, stripeNumber);
         block++;
         stripeNumber = block % NUMBER_STRIPES;
-        int unread = size - bytesLeft;
+        off_t unread = size - bytesLeft;
         read_mirrored(g_objs.pools[stripeNumber], NUMBER_MIRRORS, buf + bytesLeft, unread, BLOCK_SIZE * (block/NUMBER_STRIPES), file_num, stripeNumber);
     } else {
         read_mirrored(g_objs.pools[stripeNumber], NUMBER_MIRRORS, buf, size, offInBlock + (BLOCK_SIZE * (block/NUMBER_STRIPES)), file_num, stripeNumber);
@@ -189,7 +192,7 @@ static int asd_write(const char *path, const char *buf, size_t size, off_t offse
 
     struct asd_file* fbuf = (struct asd_file*) fi->fh;
     int file_num  = fbuf->id;
-    int file_size = fbuf->stbuf.st_size;
+    off_t file_size = fbuf->stbuf.st_size;
 
     // Enlarge the file size to size + offset, if we are writing past
     // the current EOF. Do not persist this with the metadata server,
@@ -200,19 +203,28 @@ static int asd_write(const char *path, const char *buf, size_t size, off_t offse
         fbuf->stbuf.st_size = file_size;
     }
 
-    int block = offset / BLOCK_SIZE;
-    int offInBlock = offset % BLOCK_SIZE;
-    int bytesLeft = BLOCK_SIZE - offInBlock;
+    off_t block = offset / BLOCK_SIZE;
+    off_t offInBlock = offset % BLOCK_SIZE;
+    off_t bytesLeft = BLOCK_SIZE - offInBlock;
     int stripeNumber = block % NUMBER_STRIPES;
 
     if(size > bytesLeft) {
         write_mirrored(g_objs.pools[stripeNumber], NUMBER_MIRRORS, buf, bytesLeft, offInBlock + (BLOCK_SIZE * (block/NUMBER_STRIPES)), file_num, stripeNumber);
         block++;
         stripeNumber = block % NUMBER_STRIPES;
-        int unwritten = size - bytesLeft;
+        off_t unwritten = size - bytesLeft;
         write_mirrored(g_objs.pools[stripeNumber], NUMBER_MIRRORS, buf + bytesLeft, unwritten, BLOCK_SIZE * (block/NUMBER_STRIPES), file_num, stripeNumber);
     } else {
         write_mirrored(g_objs.pools[stripeNumber], NUMBER_MIRRORS, buf, size, offInBlock + (BLOCK_SIZE * (block/NUMBER_STRIPES)), file_num, stripeNumber);
+    }
+
+    int p, q;
+    for(q = 0; q < NUMBER_STRIPES; q++) {
+        for(p = 0; p < NUMBER_MIRRORS; p++) {
+            if(g_objs.pools[q][p]->invalidate == 1) {
+                mdc_invalidate(host, slave, file_num, p);
+            }
+        }
     }
 
     pthread_rwlock_unlock(&lock);
@@ -232,9 +244,9 @@ static int asd_flush(const char *path, struct fuse_file_info *fi)
 
     struct asd_file* fbuf = (struct asd_file*) fi->fh;
     int file_num  = fbuf->id;
-    int file_size = fbuf->stbuf.st_size;
+    off_t file_size = fbuf->stbuf.st_size;
 
-    mdc_truncate(host, path + 1, file_size);
+    mdc_truncate(host, slave, path + 1, file_size);
 
     return 0;
 }
@@ -249,8 +261,10 @@ static int asd_fsync(const char *path, int datasync, struct fuse_file_info *fi)
 
 static struct fuse_opt asd_opts[] = {
     ASD_OPT("host=%s", hostname, 0),
+    ASD_OPT("slavehost=%s", slavehostname, 0),
     ASD_OPT("port=%i", port, 0),
-    
+    ASD_OPT("slaveport=%i", slaveport, 0),
+
     FUSE_OPT_KEY("-V", KEY_VERSION),
     FUSE_OPT_KEY("--version", KEY_VERSION),
     FUSE_OPT_KEY("-h", KEY_HELP),
@@ -285,13 +299,15 @@ static int asd_opt_proc(void *data, const char *arg, int key, struct fuse_args *
             "    -V   --version   print version\n"
             "\n"
             "asdfs options:\n"
-            "    -o host=STRING\n hostname of metadata server\n"
-            "    -o port=NUM\n    port of metadata server\n"
+            "    -o host=STRING\n  hostname of metadata server\n"
+            "    -o port=NUM\n     port of metadata server\n"
+            "    -o slavehost=STRING\n hostname of slave metadata server\n"
+            "    -o slaveport=NUM\n port of slave metadata server\n"
             , outargs->argv[0]);
         fuse_opt_add_arg(outargs, "-ho");
         fuse_main(outargs->argc, outargs->argv, &asd_oper, NULL);
         exit(1);
-    
+
     case KEY_VERSION:
         fprintf(stderr, "asdfs version %d\n", PACKAGE_VERSION);
         fuse_opt_add_arg(outargs, "--version");
@@ -316,7 +332,9 @@ int main(int argc, char *argv[])
     fuse_opt_parse(&args, &conf, asd_opts, asd_opt_proc);
     host.hostname = conf.hostname;
     host.port = conf.port;
-    g_objs = mdc_getobjects(host);
+    slave.hostname = conf.slavehostname;
+    slave.port = conf.slaveport;
+    g_objs = mdc_getobjects(host, slave);
 
     return fuse_main(args.argc, args.argv, &asd_oper, NULL);
 }

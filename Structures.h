@@ -35,6 +35,7 @@ struct asd_connection {
 struct asd_pool {
     pthread_mutex_t mutex;
     int alive;
+    int invalidate;
     struct asd_host host;
     int num_connections;
     struct asd_connection* connections;

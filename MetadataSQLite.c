@@ -117,6 +117,25 @@ static int md_mknod(const char* path, mode_t mode) {
 }
 
 /**
+ * The mknod call inserts a new file into the database with default
+ * times.
+ */
+static int md_invalidate(int file, int store) {
+    sqlite3_stmt *stmt = NULL;
+    const char *tail = NULL;
+    int rc;
+    rc = sqlite3_prepare(md_db,
+        "INSERT INTO Invalid (file, store) VALUES (?, ?)", 1024, &stmt, &tail );
+    md_clerr(rc);
+    sqlite3_bind_int(stmt, 1, file);
+    sqlite3_bind_int(stmt, 2, store);
+    rc = sqlite3_step(stmt);
+    md_done(rc);
+
+    return 0;
+}
+
+/**
  * The unlink call removes a file from the database.
  */
 static int md_unlink(const char* path) {
@@ -211,6 +230,25 @@ static int md_getobjects(void *sock) {
                                     sqlite3_column_int(stmt, 1),
                                     sqlite3_column_text(stmt, 2),
                                     sqlite3_column_int(stmt, 3));
+        fflush(sock);
+    }
+    return 0;
+}
+
+/**
+ * Get all the invalidated files.
+ */
+static int md_getinvalid(void* sock, const char* host, int port) {
+    char *errMsg = NULL;
+    const char *tail = NULL;
+    sqlite3_stmt *stmt = NULL;
+    int rc;
+    rc = sqlite3_prepare(md_db,
+        "SELECT file,bytes FROM Invalid NATURAL JOIN File NATURAL JOIN StoreAddress WHERE addr=? AND port=?", 1024, &stmt, &tail );
+    sqlite3_bind_text(stmt, 1, host, strlen(host), SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 2, port);
+    while((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        fprintf(sock, "%d\n%jd\n", sqlite3_column_int(stmt, 0), (intmax_t)sqlite3_column_int64(stmt, 1));
         fflush(sock);
     }
     return 0;
@@ -339,6 +377,16 @@ int dispatch(char* str, int client) {
         uid_t uid = atoi(strtok(NULL, "|"));
         gid_t gid = atoi(strtok(NULL, "|"));
         md_chown(name, uid, gid);
+    } else if(strcmp(cmd, "invalidate") == 0) {
+        printf("'invalidate' received\n");
+        int file = atoi(strtok(NULL, "|"));
+        int store = atoi(strtok(NULL, "|"));
+        md_invalidate(file, store);
+    } else if(strcmp(cmd, "getinvalid") == 0) {
+        printf("'getinvalid' received\n");
+        char* hostname = strtok(NULL, "|");
+        int port = atoi(strtok(NULL, "|"));
+        md_getinvalid(stream, hostname, port);
     }
     return 0;
 }

@@ -15,8 +15,10 @@ int connect_to_server(struct asd_host host)
     struct hostent *server;
 
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd < 0)
+    if (sockfd < 0) {
         log("Error opening socket");
+        return -1;
+    }
     server = gethostbyname(host.hostname);
     if (server == NULL) {
         log("No such host.\n");
@@ -29,7 +31,17 @@ int connect_to_server(struct asd_host host)
     serv_addr.sin_port = htons(host.port);
     if(connect(sockfd,(const struct sockaddr*)&serv_addr,sizeof(serv_addr))<0) {
         log("Error connecting to server: %s port %d", host.hostname, host.port);
+        return -1;
     }
 
     return sockfd;
+}
+
+int connect_to_server_wslave(struct asd_host host, struct asd_host slave)
+{
+    int val = connect_to_server(host);
+    if(val < 0) {
+        val = connect_to_server(slave);
+    }
+    return val;
 }

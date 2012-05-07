@@ -9,10 +9,21 @@
 #include "Structures.h"
 #include "Logger.h"
 
-int mdc_mknod(struct asd_host host, const char* path, mode_t mode){
+int mdc_invalidate(struct asd_host host, struct asd_host slave, int file, int store){
+    log("[INFO][METADATA] Sending command to server to invalidate a file.");
+    int sockfd, n;
+    sockfd = connect_to_server_wslave(host, slave);
+    char str[512];
+    snprintf(str, sizeof(str), "invalidate|%d|%d", file, store);
+    n = write(sockfd, str, strlen(str));
+    close(sockfd);
+    return 0;
+}
+
+int mdc_mknod(struct asd_host host, struct asd_host slave, const char* path, mode_t mode){
     log("[INFO][METADATA] Sending command to server to create node.");
     int sockfd, n;
-    sockfd = connect_to_server(host);
+    sockfd = connect_to_server_wslave(host, slave);
     char str[512];
     snprintf(str, sizeof(str), "mknod|%s|%d", path, mode);
     n = write(sockfd, str, strlen(str));
@@ -20,10 +31,10 @@ int mdc_mknod(struct asd_host host, const char* path, mode_t mode){
     return 0;
 }
 
-int mdc_chown(struct asd_host host, const char* path, uid_t uid, gid_t gid){
+int mdc_chown(struct asd_host host, struct asd_host slave, const char* path, uid_t uid, gid_t gid){
     log("[INFO][METADATA] Sending command to server to change node owner.");
     int sockfd, n;
-    sockfd = connect_to_server(host);
+    sockfd = connect_to_server_wslave(host, slave);
     char str[512];
     snprintf(str, sizeof(str), "chown|%s|%d|%d", path, uid, gid);
     n = write(sockfd, str, strlen(str));
@@ -31,10 +42,10 @@ int mdc_chown(struct asd_host host, const char* path, uid_t uid, gid_t gid){
     return 0;
 }
 
-int mdc_truncate(struct asd_host host, const char* path, unsigned long long size){
+int mdc_truncate(struct asd_host host, struct asd_host slave, const char* path, unsigned long long size){
     log("[INFO][METADATA] Sending command to server to truncate node.");
     int sockfd, n;
-    sockfd = connect_to_server(host);
+    sockfd = connect_to_server_wslave(host, slave);
     char str[512];
     snprintf(str, sizeof(str), "truncate|%s|%llu", path,  (unsigned long long) size);
     n = write(sockfd, str, strlen(str));
@@ -42,10 +53,10 @@ int mdc_truncate(struct asd_host host, const char* path, unsigned long long size
     return 0;
 }
 
-int mdc_unlink(struct asd_host host, const char* path){
+int mdc_unlink(struct asd_host host, struct asd_host slave, const char* path){
     log("[INFO][METADATA] Sending command to server to unlink node.");
     int sockfd, n;
-    sockfd = connect_to_server(host);
+    sockfd = connect_to_server_wslave(host, slave);
     char str[512];
     snprintf(str, sizeof(str), "unlink|%s", path);
     n = write(sockfd, str, strlen(str));
@@ -53,11 +64,11 @@ int mdc_unlink(struct asd_host host, const char* path){
     return 0;
 }
 
-int mdc_readdir(struct asd_host host, const char *path, void *buf, 
+int mdc_readdir(struct asd_host host, struct asd_host slave, const char *path, void *buf,
                         fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
     int sockfd, n;
     log("[INFO][METADATA] Reading directory data from server.");
-    sockfd = connect_to_server(host);
+    sockfd = connect_to_server_wslave(host, slave);
     n = write(sockfd, "readdir", strlen("readdir"));
     FILE* stream = fdopen(sockfd, "r");
     char str[512];
@@ -73,11 +84,34 @@ int mdc_readdir(struct asd_host host, const char *path, void *buf,
     return 0;
 }
 
-struct asd_objects mdc_getobjects(struct asd_host host) {
+int mdc_getinvalid(struct asd_host host, struct asd_host slave, const char* hostname, int port, int* array, intmax_t* sarray, int maximum) {
+    int sockfd, n;
+    log("[INFO][METADATA] Reading invalid data from server.");
+    sockfd = connect_to_server_wslave(host, slave);
+    char str[512];
+    snprintf(str, sizeof(str), "getinvalid|%s|%d", hostname, port);
+    n = write(sockfd, str, strlen(str));
+    FILE* stream = fdopen(sockfd, "r");
+    int i = 0;
+    char str2[512];
+    while(fgets(str2, sizeof(str2), stream) && i < maximum) {
+        array[i] = atoi(str2);
+        fgets(str2, sizeof(str2), stream);
+        sarray[i] = atoi(str2);
+        i++;
+    }
+    array[i] = 0;
+    fclose(stream);
+    close(sockfd);
+
+    return 0;
+}
+
+struct asd_objects mdc_getobjects(struct asd_host host, struct asd_host slave) {
     int sockfd, n;
     struct asd_objects objs;
     log("[INFO][METADATA] Reading file objects data from server.");
-    sockfd = connect_to_server(host);
+    sockfd = connect_to_server_wslave(host, slave);
     char str[512];
     snprintf(str, sizeof(str), "getobjects");
     n = write(sockfd, str, strlen(str));
@@ -104,10 +138,10 @@ struct asd_objects mdc_getobjects(struct asd_host host) {
     return objs;
 }
 
-int mdc_getattr(struct asd_host host, const char* path, struct stat* stbuf) {
+int mdc_getattr(struct asd_host host, struct asd_host slave, const char* path, struct stat* stbuf) {
     int sockfd, n;
     log("[INFO][METADATA] Getting attributes from server.");
-    sockfd = connect_to_server(host);
+    sockfd = connect_to_server_wslave(host, slave);
     char str[512];
     snprintf(str, sizeof(str), "getattr|%s", path);
     n = write(sockfd, str, strlen(str));
@@ -134,12 +168,12 @@ int mdc_getattr(struct asd_host host, const char* path, struct stat* stbuf) {
     return 0;
 }
 
-int mdc_getfile(struct asd_host host, const char* path) {
+int mdc_getfile(struct asd_host host, struct asd_host slave, const char* path) {
     int sockfd, n;
     int ret = 0;
 
     log("[INFO][METADATA] Getting file number from server.");
-    sockfd = connect_to_server(host);
+    sockfd = connect_to_server_wslave(host, slave);
     char str[512];
     snprintf(str, sizeof(str), "getfile|%s", path);
     n = write(sockfd, str, strlen(str));

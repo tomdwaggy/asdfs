@@ -17,6 +17,7 @@ int write_remote(struct asd_pool* pool, const char* buf, struct obj_header head)
 
     if(sockfd < 0) {
         log("[ERROR][WRITE] Tried to write to a dead socket.");
+        pool->invalidate = 1;
         return 0;
     }
 
@@ -47,6 +48,7 @@ int read_remote(struct asd_pool* pool, char* buf, struct obj_header head) {
 
     if(sockfd < 0) {
         log("[ERROR][READ] Tried to read from a dead socket.");
+        pool->invalidate = 1;
         return 0;
     }
 
@@ -59,7 +61,7 @@ int read_remote(struct asd_pool* pool, char* buf, struct obj_header head) {
     int remaining = head.size;
 
     int n = 1;
-    int offset = 0;
+    off_t offset = 0;
     while(remaining > 0 && n > 0) {
         n = read(sockfd, buf + offset, remaining);
 

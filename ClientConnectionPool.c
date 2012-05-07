@@ -25,6 +25,7 @@ void try_reconnect(struct asd_pool* pool, int sockfd) {
             pthread_mutex_unlock(&pool->connections[fdi].mutex);
             pool->connections[fdi].fd = -1;
             pool->alive = 0;
+            pool->invalidate = 1;
         }
         return;
     }
@@ -38,6 +39,7 @@ struct asd_pool* create_pool(struct asd_host host, int num_connections) {
     pool->connections = malloc(sizeof(struct asd_connection) * num_connections);
     pool->host = host;
     pool->alive = 1;
+    pool->invalidate = 0;
     int i;
     for(i = 0; i < num_connections; i++) {
         pool->connections[i].available = 1;
@@ -67,6 +69,7 @@ int get_connection_b(struct asd_pool* pool) {
                 recv(fd, nbuf, sizeof(char), 0);
                 pool->connections[i].fd = fd;
                 pool->alive = 1;
+                pool->invalidate = 0;
             }
         }
     }
